@@ -1,5 +1,5 @@
 # =============================================================
-# IMPORTS (FINAL)
+# IMPORTS
 # =============================================================
 
 from dotenv import load_dotenv
@@ -8,7 +8,7 @@ import os
 import uuid
 import tempfile
 
-# LLMs
+# LLM Models
 from langchain_groq import ChatGroq
 from langchain_google_genai import ChatGoogleGenerativeAI
 
@@ -17,45 +17,38 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableParallel
 from langchain_core.output_parsers import StrOutputParser
 
-# PDF & Splitting
+# PDF Loaders
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-# Embeddings + ChromaDB
+# Embeddings + Chroma (in-memory)
 from langchain_community.embeddings import SentenceTransformerEmbeddings
 from langchain_community.vectorstores import Chroma
-
-# NEW Chroma Client for Python 3.13
-import chromadb
-from chromadb.config import Settings
 
 
 # =============================================================
 # STREAMLIT SETUP
 # =============================================================
+
 load_dotenv()
-st.set_page_config(page_title="Best Quotation Recommender", page_icon="💬")
-st.header("💬 Insurance Quotation Recommender (Chroma + RAG)")
+st.set_page_config(page_title="Best Insurance Quotation Recommender", page_icon="💬")
+st.header("💬 Insurance Quotation Recommender (In-Memory Vector DB)")
 
 
 # =============================================================
-# VECTOR STORE INITIALIZATION (NEW WORKING VERSION)
+# VECTOR STORE (IN-MEMORY) — 100% STREAMLIT CLOUD COMPATIBLE
 # =============================================================
+
 @st.cache_resource
 def get_vectorstore():
 
     embedding_model = SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
 
-    persist_dir = "/mount/data/chroma_store"
-
-    # Create a persistent Chroma client (NEW WORKING API)
-    client = chromadb.PersistentClient(path=persist_dir)
-
-    # Create or load the collection
+    # In-memory Chroma — runs everywhere, no tenant errors
     vectordb = Chroma(
-        client=client,
         collection_name="quotations",
-        embedding_function=embedding_model
+        embedding_function=embedding_model,
+        # No persist_directory = no errors on Streamlit Cloud
     )
 
     return vectordb, embedding_model
@@ -67,38 +60,43 @@ vectorstore, embedding_model = get_vectorstore()
 # =============================================================
 # UI TABS
 # =============================================================
+
 tabs = st.tabs(["About", "Chatbot", "History"])
 
 
 # =============================================================
 # ABOUT TAB
 # =============================================================
+
 with tabs[0]:
-    st.subheader("About")
+    st.subheader("About This App")
     st.write("""
-    This system:
-    - Uses ChromaDB (persistent vector DB) on Streamlit Cloud  
-    - Detects valid motor insurance quotations  
-    - Generates expert recommendations  
-    - Stores embeddings for search  
-    - Query is optional  
+    This AI system:
+    - Classifies whether PDFs are valid insurance quotations  
+    - Extracts & evaluates premium, IDV, add-ons, coverage  
+    - Makes a structured recommendation  
+    - Stores quotations in an in-memory vector DB  
+    - Allows history search during the session  
+
+    Perfect for ValueMomentum demonstration.
     """)
 
 
 # =============================================================
 # CHATBOT TAB
 # =============================================================
+
 with tabs[1]:
 
-    st.subheader("Upload Insurance Quotation PDFs")
+    st.subheader("Upload Quotation PDFs")
 
     uploaded_files = st.file_uploader(
-        "📄 Upload quotation PDFs",
+        "📄 Upload insurance quotation PDFs",
         type=["pdf"],
         accept_multiple_files=True
     )
 
-    user_query = st.text_area("💬 Enter procurement query (optional):")
+    user_query = st.text_area("💬 Enter your query (optional):")
 
     if st.button("🔍 Analyze"):
 
@@ -107,16 +105,17 @@ with tabs[1]:
             st.warning("Please upload at least one quotation PDF.")
             st.stop()
 
+        # Query optional
         if not user_query.strip():
             user_query = (
                 "Recommend the best quotation based on premium, IDV, add-ons, "
-                "and value for money."
+                "coverage benefits, and value for money."
             )
 
         all_texts = []
         metadata_list = []
 
-        # Process PDFs
+        # Load + Split PDFs
         for f in uploaded_files:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                 tmp.write(f.read())
@@ -129,7 +128,7 @@ with tabs[1]:
                 chunk_size=1000, chunk_overlap=100
             )
             docs = splitter.split_documents(pages)
-            text = " ".join(doc.page_content for doc in docs)
+            text = " ".join(d.page_content for d in docs)
 
             all_texts.append(text)
 
@@ -143,27 +142,24 @@ with tabs[1]:
 
         combined_text = "\n\n".join(all_texts)
 
-        # Relevance Prompt
+        # Relevance Classifier
         relevance_prompt = PromptTemplate(
             template="""
-            You are a document classifier.
+            You are a classifier.
 
-            Identify if this text is an INSURANCE QUOTATION.
+            Determine if this document is an INSURANCE QUOTATION.
 
-            A valid insurance quotation typically contains:
+            Valid quotation usually includes:
             - Insurance company name
-            - Policy type (Motor OD, Standalone OD, etc.)
-            - IDV (Insured Declared Value)
+            - Policy type
+            - IDV value
             - Premium breakup (OD, add-ons, GST)
-            - Final premium amount
-            - Vehicle details (model, registration, variant)
-            - Validity note or disclaimer
+            - Final premium
+            - Vehicle details
+            - Validity note
 
-            If valid, reply:
-            YES
-
-            Otherwise:
-            NO
+            If valid: YES
+            Else: NO
 
             TEXT:
             {document}
@@ -179,20 +175,19 @@ with tabs[1]:
             USER QUERY:
             {query}
 
-            QUOTATION CONTENT:
+            QUOTATION DATA:
             {document}
 
-            Compare quotations based on:
-            - Final Premium
+            Compare quotations on:
+            - Premium
             - IDV
-            - Add-on covers
+            - Add-ons
             - Value for money
-            - Clarity of terms
 
             Provide:
-            1. Factor-by-factor comparison  
-            2. Pros & cons  
-            3. Final recommendation  
+            1. Comparison  
+            2. Pros / Cons  
+            3. Final Recommendation  
             """,
             input_variables=["query", "document"]
         )
@@ -200,16 +195,16 @@ with tabs[1]:
         parser = StrOutputParser()
 
         # Models
-        model_classifier = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
-        model_recommender = ChatGroq(
+        model_cls = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+        model_eval = ChatGroq(
             api_key=os.getenv("GROQ_API_KEY"),
             model="openai/gpt-oss-120b"
         )
 
-        # Parallel chain
+        # Parallel execution
         chain = RunnableParallel(
-            relevance=relevance_prompt | model_classifier | parser,
-            recommendation=recommend_prompt | model_recommender | parser
+            relevance=relevance_prompt | model_cls | parser,
+            recommendation=recommend_prompt | model_eval | parser
         )
 
         result = chain.invoke({
@@ -217,17 +212,16 @@ with tabs[1]:
             "query": user_query
         })
 
+        # Validate
         if result["relevance"].strip() != "YES":
             st.error("❌ This does not appear to be an insurance quotation.")
             st.stop()
 
-        # Store in Chroma
+        # Store in vectorstore
         for text, meta in zip(all_texts, metadata_list):
             vectorstore.add_texts([text], metadatas=[meta])
 
-        vectorstore.persist()
-
-        st.success("🧠 Stored quotation in database!")
+        st.success("🧠 Stored quotations in memory!")
 
         st.subheader("🧠 Recommendation:")
         st.write(result["recommendation"])
@@ -236,18 +230,17 @@ with tabs[1]:
 # =============================================================
 # HISTORY TAB
 # =============================================================
+
 with tabs[2]:
 
-    st.subheader("Search Previous Quotations")
+    st.subheader("Search Stored Quotations")
 
-    q = st.text_input(
-        "Search (e.g., 'TATA', 'premium', 'IDV', 'zero dep')"
-    )
+    q = st.text_input("Search (e.g., 'premium', 'TATA', 'IDV'): ")
 
     if st.button("Search"):
 
         if not q.strip():
-            st.warning("Enter a keyword.")
+            st.warning("Enter search keyword.")
             st.stop()
 
         docs = vectorstore.similarity_search(q, k=5)
