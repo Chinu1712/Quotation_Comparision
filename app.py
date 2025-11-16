@@ -7,7 +7,8 @@ import streamlit as st
 import os
 import uuid
 import tempfile
-import faiss
+import faiss_cpu as faiss
+
 
 # LangChain LLM Models
 from langchain_groq import ChatGroq
@@ -274,3 +275,4 @@ with tabs[2]:
                     st.write("Supplier:", r.metadata.get("supplier"))
                     st.write("Quotation ID:", r.metadata.get("quotation_id"))
                     st.write(r.page_content[:800] + "…")
+
