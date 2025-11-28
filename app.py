@@ -32,7 +32,7 @@ from langchain_community.vectorstores import Chroma
 
 load_dotenv()
 st.set_page_config(page_title="Best Insurance Quotation Recommender", page_icon="💬")
-st.header("💬 Insurance Quotation Recommender (In-Memory Vector DB)")
+st.header("💬 Best Quotation Recommender")
 
 
 # =============================================================
@@ -254,3 +254,4 @@ with tabs[2]:
                     st.write("Supplier:", meta.get("supplier"))
                     st.write("Quotation ID:", meta.get("quotation_id"))
                     st.write(d.page_content[:800] + "…")
+
