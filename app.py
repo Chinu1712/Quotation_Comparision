@@ -91,7 +91,7 @@ with tabs[1]:
     st.subheader("Upload Quotation PDFs")
 
     uploaded_files = st.file_uploader(
-        "📄 Upload insurance quotation PDFs",
+        "📄 quotation PDFs",
         type=["pdf"],
         accept_multiple_files=True
     )
@@ -254,4 +254,5 @@ with tabs[2]:
                     st.write("Supplier:", meta.get("supplier"))
                     st.write("Quotation ID:", meta.get("quotation_id"))
                     st.write(d.page_content[:800] + "…")
+
 
