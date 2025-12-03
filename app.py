@@ -1,6 +1,4 @@
-# =============================================================
-# IMPORTS
-# =============================================================
+
 
 from dotenv import load_dotenv
 import streamlit as st
@@ -21,34 +19,30 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-# Embeddings + Chroma (in-memory)
+
 from langchain_community.embeddings import SentenceTransformerEmbeddings
 from langchain_community.vectorstores import Chroma
 
 
-# =============================================================
-# STREAMLIT SETUP
-# =============================================================
+
 
 load_dotenv()
 st.set_page_config(page_title="Best Insurance Quotation Recommender", page_icon="💬")
 st.header("💬 Best Quotation Recommender")
 
 
-# =============================================================
-# VECTOR STORE (IN-MEMORY) — 100% STREAMLIT CLOUD COMPATIBLE
-# =============================================================
+#vector store 
 
 @st.cache_resource
 def get_vectorstore():
 
     embedding_model = SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
 
-    # In-memory Chroma — runs everywhere, no tenant errors
+    #Chroma Db
     vectordb = Chroma(
         collection_name="quotations",
         embedding_function=embedding_model,
-        # No persist_directory = no errors on Streamlit Cloud
+        
     )
 
     return vectordb, embedding_model
@@ -57,17 +51,11 @@ def get_vectorstore():
 vectorstore, embedding_model = get_vectorstore()
 
 
-# =============================================================
-# UI TABS
-# =============================================================
 
 tabs = st.tabs(["About", "Chatbot", "History"])
 
 
-# =============================================================
-# ABOUT TAB
-# =============================================================
-
+#ABOUT TAB
 with tabs[0]:
     st.subheader("About This App")
     st.write("""
@@ -82,9 +70,7 @@ with tabs[0]:
     """)
 
 
-# =============================================================
-# CHATBOT TAB
-# =============================================================
+#CHATBOT TAB
 
 with tabs[1]:
 
@@ -105,7 +91,7 @@ with tabs[1]:
             st.warning("Please upload at least one quotation PDF.")
             st.stop()
 
-        # Query optional
+        # Query 
         if not user_query.strip():
             user_query = (
                 "Recommend the best quotation based on premium, IDV, add-ons, "
@@ -201,7 +187,7 @@ with tabs[1]:
             model="openai/gpt-oss-120b"
         )
 
-        # Parallel execution
+        # Parallel Chaining 
         chain = RunnableParallel(
             relevance=relevance_prompt | model_cls | parser,
             recommendation=recommend_prompt | model_eval | parser
@@ -227,10 +213,7 @@ with tabs[1]:
         st.write(result["recommendation"])
 
 
-# =============================================================
 # HISTORY TAB
-# =============================================================
-
 with tabs[2]:
 
     st.subheader("Search Stored Quotations")
@@ -254,6 +237,7 @@ with tabs[2]:
                     st.write("Supplier:", meta.get("supplier"))
                     st.write("Quotation ID:", meta.get("quotation_id"))
                     st.write(d.page_content[:800] + "…")
+
 
 
 
